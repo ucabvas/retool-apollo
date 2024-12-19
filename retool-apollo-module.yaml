@@ -1,0 +1,231 @@
+name: "RetoolApplicationServices"
+displayName: "Retool Application Services"
+description: "A deployment of the Retool application alongside its dependencies."
+variables:
+  tfcOrganization:
+    type: string
+    string:
+      description: "Terraform Cloud Organization"
+  tfcProject:
+    type: string
+    string:
+      description: "Terraform Cloud Project"
+  tfcAwsDefaultRegion:
+    type: string
+    string:
+      description: "AWS region for Terraform Cloud to deploy resources into"
+  tfcAwsRunRoleArn:
+    type: string
+    string:
+      description: "AWS role ARN for assumed by TFC"
+  awsVpcId:
+    type: string
+    string:
+      description: "AWS VPC to deploy resources into"
+  awsSubnetId0:
+    type: string
+    string:
+      description: "Private Subnet 0 in the AWS VPC"
+  awsSubnetId1:
+    type: string
+    string:
+      description: "Private Subnet 1 in the AWS VPC"
+  awsRdsPassword:
+    type: string
+    string:
+      description: "Password for the Retool RDS instance"
+  retoolEnvironmentIdentifier:
+    type: string
+    string:
+      defaultValue: "prod"
+      description: "Identifier for the retool environment"
+  retoolWebUrl:
+    type: string
+    string:
+      description: "URL of this Retool instance"
+  releaseChannel:
+    type: string
+    string:
+      defaultValue: "RELEASE"
+      description: "Default Release Channel for all Entities in this module"
+entities:
+  - type: helmChart
+    helmChart:
+      entityName: hcp-terraform-operator-{{ moduleVariable.retoolEnvironmentIdentifier }}
+      productId: corp.hashicorp:hcp-terraform-operator
+      k8sNamespace: retool-{{ moduleVariable.retoolEnvironmentIdentifier }}
+      releaseChannel: "{{ moduleVariable.releaseChannel }}"
+      secretRequirements:
+        tfc-operator:
+          type: multikey
+          multikey:
+            description: Token for Terraform Cloud
+            keys:
+              - token
+      configOverrides: |
+        2.7.1:
+          overrides:
+            operator:
+              watchedNamespaces:
+                - retool-{{ moduleVariable.retoolEnvironmentIdentifier }}
+  - type: helmChart
+    helmChart:
+      entityName: retool-rds-{{ moduleVariable.retoolEnvironmentIdentifier }}
+      productId: corp.palantir:terraform-aws-vv-rds-helm
+      k8sNamespace: retool-{{ moduleVariable.retoolEnvironmentIdentifier }}
+      releaseChannel: "{{ moduleVariable.releaseChannel }}"
+      configOverrides: |
+        0.0.21:
+          overrides:
+            tfc:
+              organization: {{ moduleVariable.tfcOrganization }}
+              project: {{ moduleVariable.tfcProject }}
+            workspace:
+              environmentVariables:
+                aws_default_region: {{ moduleVariable.tfcAwsDefaultRegion }}
+                tfc_aws_run_role_arn: {{ moduleVariable.tfcAwsRunRoleArn }}
+              terraformVariables:
+                vv_rds_env_identifier: {{ moduleVariable.retoolEnvironmentIdentifier }}
+                vv_rds_password: {{ moduleVariable.awsRdsPassword }}
+                vv_rds_subnet_id_0: {{ moduleVariable.awsSubnetId0 }}
+                vv_rds_subnet_id_1: {{ moduleVariable.awsSubnetId1 }}
+                vv_rds_vpc_id: {{ moduleVariable.awsVpcId }}
+  - type: helmChart
+    helmChart:
+      entityName: temporal-{{ moduleVariable.retoolEnvironmentIdentifier }}
+      productId: io.temporal:temporal
+      k8sNamespace: retool-{{ moduleVariable.retoolEnvironmentIdentifier }}
+      releaseChannel: "{{ moduleVariable.releaseChannel }}"
+      secretRequirements:
+        temporal-sql-password:
+          type: multikey
+          multikey:
+            description: Password temporal should use to connect to postgres
+            keys:
+              - password
+      configOverrides: |
+        0.51.0:
+          overrides:
+            server:
+              config:
+                namespaces:
+                  create: true
+                  namespace:
+                    - name: default
+                persistence:
+                  default:
+                    driver: sql
+                    sql:
+                      driver: postgres12
+                      host: rds-retool-{{ moduleVariable.retoolEnvironmentIdentifier }}.retool-{{ moduleVariable.retoolEnvironmentIdentifier }}.internal
+                      port: 5432
+                      database: temporal
+                      user: postgres
+                      existingSecret: "temporal-{{ moduleVariable.retoolEnvironmentIdentifier }}-temporal-sql-password"
+                      maxConns: 20
+                      maxConnLifetime: "1h"
+                      tls:
+                        enabled: true
+                        enableHostVerification: false
+                  visibility:
+                    driver: sql
+                    sql:
+                      driver: postgres12
+                      host: rds-retool-{{ moduleVariable.retoolEnvironmentIdentifier }}.retool-{{ moduleVariable.retoolEnvironmentIdentifier }}.internal
+                      port: 5432
+                      database: temporal_visibility
+                      user: postgres
+                      existingSecret: "temporal-{{ moduleVariable.retoolEnvironmentIdentifier }}-temporal-sql-password"
+                      maxConns: 20
+                      maxConnLifetime: "1h"
+                      tls:
+                        enabled: true
+                        enableHostVerification: false
+            cassandra:
+              enabled: false
+            mysql:
+              enabled: false
+            postgresql:
+              enabled: true
+            prometheus:
+              enabled: false
+            grafana:
+              enabled: false
+            elasticsearch:
+              enabled: false
+            schema:
+              createDatabase:
+                enabled: true
+              setup:
+                enabled: true
+              update:
+                enabled: true
+  - type: helmChart
+    helmChart:
+      entityName: retool-{{ moduleVariable.retoolEnvironmentIdentifier }}
+      productId: com.retool:retool
+      k8sNamespace: retool-{{ moduleVariable.retoolEnvironmentIdentifier }}
+      releaseChannel: "{{ moduleVariable.releaseChannel }}"
+      secretRequirements:
+        retool-license-key:
+          type: multikey
+          multikey:
+            description: License Key for retool
+            keys:
+              - license-key
+        retool-encryption-key:
+          type: multikey
+          multikey:
+            description: Encryption key for retool
+            keys:
+              - encryption-key
+        retool-jwt-secret:
+          type: multikey
+          multikey:
+            description: JWT secret for retool
+            keys:
+              - jwt-secret
+        retool-database-password:
+          type: multikey
+          multikey:
+            description: Password retool should use to connect to postgres
+            keys:
+              - postgresql-password
+
+      configOverrides: |
+        6.2.14:
+          overrides:
+            config:
+              licenseKeySecretName: "retool-{{ moduleVariable.retoolEnvironmentIdentifier }}-retool-license-key"
+              useInsecureCookies: true
+              encryptionKeySecretName: "retool-{{ moduleVariable.retoolEnvironmentIdentifier }}-retool-encryption-key"
+              jwtSecretSecretName: "retool-{{ moduleVariable.retoolEnvironmentIdentifier }}-retool-jwt-secret"
+
+              postgresql:
+                host: rds-retool-{{ moduleVariable.retoolEnvironmentIdentifier }}.retool-{{ moduleVariable.retoolEnvironmentIdentifier }}.internal
+                port: 5432
+                db: retool
+                user: postgres
+                passwordSecretName: "retool-{{ moduleVariable.retoolEnvironmentIdentifier }}-retool-database-password"
+                ssl_enabled: true
+
+            image:
+              repository: "tryretool/backend"
+              tag: "3.114.1-stable"
+              pullPolicy: "IfNotPresent"
+
+            ingress:
+              enabled: false
+
+            postgresql:
+              enabled: false
+
+            workflows:
+              enabled: true
+
+              temporal:
+                enabled: true
+                host: temporal-{{ moduleVariable.retoolEnvironmentIdentifier }}-frontend.retool-{{ moduleVariable.retoolEnvironmentIdentifier }}.svc.cluster.local
+                port: 7233
+                namespace: default
+                sslEnabled: false

@@ -1,0 +1,17 @@
+manifest-version: "1.0"
+product-group: io.temporal
+product-name: temporal
+product-version: 0.51.0
+product-type: helm-chart.v1
+extensions:
+  helm-chart:
+    helm-chart-name: temporal
+    helm-chart-version: 0.51.0
+    helm-repository-url: https://go.temporal.io/helm-charts
+  product-dependencies:
+   - product-group: corp.palantir
+     product-name: terraform-aws-vv-rds-helm
+     minimum-version: 0.0.21
+     maximum-version: 0.x.x
+     optional: false
+  rollout-strategy: "applyChangesNoWait"
