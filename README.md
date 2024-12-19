@@ -2,7 +2,7 @@
 This is the Apollo module to create a working Retool install in Apollo. It installs Retool and its dependencies.
 
 # Prerequisites
-You need to have a [k8s cluster in EKS](https://github.palantir.build/vasilev/retool-k8s-tf) and a Terraform Cloud account.
+You need to have a k8s cluster in EKS and a Terraform Cloud account.
 You need an Apollo environment and apollo-cli set up locally.
 
 # Setup instructions
